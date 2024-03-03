@@ -1,11 +1,10 @@
-import json
-
 from reservation import Reservation
-import resy
+from resy import ResyWorkflow
 
 import discord
 from discord.ext import commands
 from discord import ui
+import json
 
 
 class ResyModal(ui.Modal, title="New Reservation"):
@@ -26,23 +25,45 @@ class ResyModal(ui.Modal, title="New Reservation"):
                                        date=str(self.date),
                                        res_time=str(self.res_time),
                                        snipe_time=str(self.snipe_time))
-        await interaction.response.send_message(
-            f'Reservation at {self.venue_id} for {self.party_size} at {self.res_time} on {self.date}')
-        result = await resy.snipe_reservation(self.reservation, interaction.user)
-        await interaction.user.send(f"Reservation result: {result}")
+        embed = discord.Embed(title="Reservation Request Details:",
+                              description=f"Venue ID: {self.venue_id}\n"
+                                          f"Party size: {self.party_size}\n"
+                                          f"Reservation date: {self.date}\n"
+                                          f"Reservation time: {self.res_time}\n"
+                                          f"Sniping tomorrow at: {self.snipe_time}",
+                              colour=discord.Colour.dark_teal())
+        # get user's api keys
+        # if they dont exist, send error
+        with open('user_tokens.json') as f:
+            data = json.load(f)[str(interaction.user.id)]
+            api_key, auth_token = data['api_key'], data['auth_token']
+        if not (api_key and auth_token):
+            await interaction.response.send_message(
+                "Couldn't find token info for your account. Use the /register command to register your account")
+            return
+        embed.set_author(name=interaction.user.name, icon_url=interaction.user.avatar.url)
+        await interaction.response.send_message(embed=embed)
+        try:
+            workflow = ResyWorkflow(self.reservation, api_key, auth_token)
+            time_booked = await workflow.snipe_reservation()
+            message = f"Reservation successfully booked, {time_booked}!"
+        except:
+            message = "Failed to book"
+        await interaction.user.send(message)
 
 
 class RegistrationModal(ui.Modal, title="Register API Keys"):
     api_key = ui.TextInput(label="API key", placeholder='"Authorization" header', required=True)
-    resy_token = ui.TextInput(label="Auth Token", placeholder='"X-Resy-Auth-Token" header', required=True, style=discord.TextStyle.long)
+    resy_token = ui.TextInput(label="Auth Token", placeholder='"X-Resy-Auth-Token" header', required=True,
+                              style=discord.TextStyle.long)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         with open('user_tokens.json') as f:
-            data = json.load(f)
-        data[interaction.user.id] = {
+            data = dict(json.load(f))
+        data[str(interaction.user.id)] = {
             'api_key': self.api_key.value,
-            'authorization': self.resy_token.value
+            'auth_token': self.resy_token.value
         }
         with open('user_tokens.json', 'w') as f:
-            json.dump(data, f)
+            json.dump(data, f, indent=4)
         await interaction.response.send_message(f'Tokens registered')
