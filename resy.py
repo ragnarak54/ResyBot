@@ -3,7 +3,7 @@ from reservation import Reservation
 
 import asyncio
 from bisect import bisect_left
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import BytesIO, StringIO
 import json
 import pycurl
@@ -32,7 +32,7 @@ class ResyWorkflow:
 
     async def snipe_reservation(self):
         now = datetime.now()
-        schedule_time = datetime.strptime(f'{now.date()} {self.reservation.snipe_time}:00', '%Y-%m-%d %H:%M:%S')
+        schedule_time = datetime.strptime(f'{now.date() + timedelta(days=1)} {self.reservation.snipe_time}:00', '%Y-%m-%d %H:%M:%S')
         time_left = schedule_time - now
         sleep_time = time_left.total_seconds()  # seconds from now until the next tables become available
         print(f"reservation request confirmed, waiting {sleep_time} seconds to snipe")
