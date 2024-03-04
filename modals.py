@@ -16,7 +16,7 @@ class ResyModal(ui.Modal, title="New Reservation"):
     party_size = ui.TextInput(label="Party size", required=True)
     date = ui.TextInput(label="Date", placeholder="YYYY-MM-DD", required=True)
     res_time = ui.TextInput(label="Time", placeholder="18:30", required=True)
-    snipe_time = ui.TextInput(label="Snipe Time", placeholder="09:00", required=True)
+    snipe_time = ui.TextInput(label="Snipe time", placeholder="09:00", required=True)
     reservation: Reservation
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
@@ -36,7 +36,7 @@ class ResyModal(ui.Modal, title="New Reservation"):
         # if they dont exist, send error
         with open('user_tokens.json') as f:
             data = json.load(f)[str(interaction.user.id)]
-            api_key, auth_token = data['api_key'], data['auth_token']
+            api_key, auth_token, time_zone = data['api_key'], data['auth_token'], data['time_zone']
         if not (api_key and auth_token):
             await interaction.response.send_message(
                 "Couldn't find token info for your account. Use the /register command to register your account")
@@ -44,7 +44,7 @@ class ResyModal(ui.Modal, title="New Reservation"):
         embed.set_author(name=interaction.user.name, icon_url=interaction.user.avatar.url)
         await interaction.response.send_message(embed=embed)
         try:
-            workflow = ResyWorkflow(self.reservation, api_key, auth_token)
+            workflow = ResyWorkflow(self.reservation, api_key, auth_token, time_zone)
             time_booked = await workflow.snipe_reservation()
             message = f"Reservation successfully booked, {time_booked}!"
         except:
@@ -52,17 +52,19 @@ class ResyModal(ui.Modal, title="New Reservation"):
         await interaction.user.send(message)
 
 
-class RegistrationModal(ui.Modal, title="Register API Keys"):
+class RegistrationModal(ui.Modal, title="Register Account and API Keys"):
     api_key = ui.TextInput(label="API key", placeholder='"Authorization" header', required=True)
     resy_token = ui.TextInput(label="Auth Token", placeholder='"X-Resy-Auth-Token" header', required=True,
                               style=discord.TextStyle.long)
+    time_zone = ui.TextInput(label="Time zone", placeholder='west, mountain, central, or east')
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         with open('user_tokens.json') as f:
             data = dict(json.load(f))
         data[str(interaction.user.id)] = {
             'api_key': self.api_key.value,
-            'auth_token': self.resy_token.value
+            'auth_token': self.resy_token.value,
+            'time_zone': self.time_zone.value
         }
         with open('user_tokens.json', 'w') as f:
             json.dump(data, f, indent=4)

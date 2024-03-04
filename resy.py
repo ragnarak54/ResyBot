@@ -9,6 +9,7 @@ import json
 import pycurl
 from tenacity import retry, stop
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 
 class ResyWorkflow:
@@ -24,15 +25,29 @@ class ResyWorkflow:
         'referer: https://widgets.resy.com/',
     ]
     reservation: Reservation
+    time_zone: ZoneInfo
 
-    def __init__(self, reservation, api_key, auth_token):
+    def __init__(self, reservation, api_key, auth_token, time_zone):
         self.headers[1] = self.headers[1].format(api_key)
         self.headers[3] = self.headers[3].format(auth_token)
         self.reservation = reservation
+        self.set_time_zone(time_zone)
+
+    def set_time_zone(self, time_zone):
+        tz = time_zone.lower()
+        if tz == "central":
+            self.time_zone = ZoneInfo("America/Chicago")
+        elif tz == "west":
+            self.time_zone = ZoneInfo("America/Los_Angeles")
+        elif tz == "mountain":
+            self.time_zone = ZoneInfo("America/Denver")
+        else:
+            self.time_zone = ZoneInfo("America/New_York")
 
     async def snipe_reservation(self):
-        now = datetime.now()
-        schedule_time = datetime.strptime(f'{now.date() + timedelta(days=1)} {self.reservation.snipe_time}:00', '%Y-%m-%d %H:%M:%S')
+        now = datetime.now(tz=self.time_zone)
+        schedule_time = datetime.strptime(f'{now.date() + timedelta(days=0)} {self.reservation.snipe_time}:00',
+                                          '%Y-%m-%d %H:%M:%S').astimezone(self.time_zone)
         time_left = schedule_time - now
         sleep_time = time_left.total_seconds()  # seconds from now until the next tables become available
         print(f"reservation request confirmed, waiting {sleep_time} seconds to snipe")
