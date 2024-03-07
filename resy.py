@@ -50,7 +50,7 @@ class ResyWorkflow:
 
     async def snipe_reservation(self):
         now = datetime.now(tz=self.time_zone)
-        schedule_time = datetime.strptime(f'{now.date() + timedelta(days=0)} {self.reservation.snipe_time}:00',
+        schedule_time = datetime.strptime(f'{now.date() + timedelta(days=1)} {self.reservation.snipe_time}:00',
                                           '%Y-%m-%d %H:%M:%S').astimezone(self.time_zone)
         time_left = schedule_time - now
         sleep_time = time_left.total_seconds()  # seconds from now until the next tables become available
