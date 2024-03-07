@@ -36,13 +36,15 @@ class ResyModal(ui.Modal, title="New Reservation"):
         # get user's api keys
         # if they dont exist, send error
         with open('user_tokens.json') as f:
+            print(f'{interaction.user.id} requesting reservation')
             data = json.load(f)[str(interaction.user.id)]
-            api_key, auth_token, time_zone = data['api_key'], data['auth_token'], data['time_zone']
-        if not (api_key and auth_token):
+            api_key, auth_token, time_zone = data.get('api_key'), data.get('auth_token'), data.get('time_zone')
+        if not (api_key and auth_token and time_zone):
             await interaction.response.send_message(
                 "Couldn't find token info for your account. Use the /register command to register your account")
             return
-        embed.set_author(name=interaction.user.name, icon_url=interaction.user.avatar.url)
+        embed.set_author(name=interaction.user.name,
+                         icon_url=None if not interaction.user.avatar else interaction.user.avatar.url)
         await interaction.response.send_message(embed=embed)
         try:
             workflow = ResyWorkflow(self.reservation, api_key, auth_token, time_zone)

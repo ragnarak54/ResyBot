@@ -50,11 +50,12 @@ class ResyWorkflow:
 
     async def snipe_reservation(self):
         now = datetime.now(tz=self.time_zone)
+        print(f"currently {now}")
         schedule_time = datetime.strptime(f'{now.date() + timedelta(days=1)} {self.reservation.snipe_time}:00',
-                                          '%Y-%m-%d %H:%M:%S').astimezone(self.time_zone)
+                                          '%Y-%m-%d %H:%M:%S').replace(tzinfo=self.time_zone)
         time_left = schedule_time - now
         sleep_time = time_left.total_seconds()  # seconds from now until the next tables become available
-        print(f"reservation request confirmed, waiting {sleep_time} seconds to snipe")
+        print(f"reservation request confirmed, waiting {int(sleep_time)} seconds to snipe")
         await asyncio.sleep(sleep_time)
         return self.resy_workflow()
 
@@ -62,11 +63,13 @@ class ResyWorkflow:
     def resy_workflow(self):
         print("starting snipe attempt")
         available_slots = self.find_reservations()
+        print(f"found {len(available_slots)} slots, searching for best")
         best_match = find_closest_match(available_slots, self.reservation)
         config_token = best_match['config']['token']
         print("available table found, attempting to get book token")
         book_token, payment_id = self.get_book_token(config_token)
         print(book_token, payment_id)
+        print("got book token! attempting to snipe...")
         self.book_reservation(book_token, payment_id)
         return best_match['date']['start']
 
@@ -126,6 +129,7 @@ class ResyWorkflow:
         c.perform()
         c.close()
         response = json.loads(buffer.getvalue())
+        print(response)
         if c.getinfo(pycurl.RESPONSE_CODE) == 412:
             raise ExistingReservationError
 
@@ -153,6 +157,6 @@ def get_best_match_from_position(available_slots, pos, target):
         return before
 
 
-# res = Reservation(0, 2, "2024-03-07", "18:45", "0")
-# workflow = ResyWorkflow(res, config.api_key, config.auth_token, "west")
-# workflow.resy_workflow()
+# res = Reservation(0, 2, "2024-03-07", "18:45", "10:00")
+# workflow = ResyWorkflow(res, config.api_key, config.auth_token, "east")
+# workflow.snipe_reservation()
