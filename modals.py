@@ -1,3 +1,4 @@
+import resy
 from reservation import Reservation
 from resy import ResyWorkflow
 
@@ -47,6 +48,8 @@ class ResyModal(ui.Modal, title="New Reservation"):
             workflow = ResyWorkflow(self.reservation, api_key, auth_token, time_zone)
             time_booked = await workflow.snipe_reservation()
             message = f"Reservation successfully booked, {time_booked}!"
+        except resy.ExistingReservationError:
+            message = "You already have a reservation that day"
         except:
             message = "Failed to book"
         await interaction.user.send(message)

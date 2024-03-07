@@ -7,9 +7,14 @@ from datetime import datetime, timedelta
 from io import BytesIO, StringIO
 import json
 import pycurl
+import tenacity
 from tenacity import retry, stop
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
+
+
+class ExistingReservationError(Exception):
+    pass
 
 
 class ResyWorkflow:
@@ -20,7 +25,6 @@ class ResyWorkflow:
         'x-resy-auth-token: {}',
     ]
     post_headers = [
-        'content-type: application/json',
         'origin: https://widgets.resy.com',
         'referer: https://widgets.resy.com/',
     ]
@@ -54,7 +58,7 @@ class ResyWorkflow:
         await asyncio.sleep(sleep_time)
         return self.resy_workflow()
 
-    @retry(stop=stop.stop_after_delay(15))
+    @retry(stop=stop.stop_after_delay(15), retry=tenacity.retry_if_not_exception_type(ExistingReservationError))
     def resy_workflow(self):
         print("starting snipe attempt")
         available_slots = self.find_reservations()
@@ -63,7 +67,7 @@ class ResyWorkflow:
         print("available table found, attempting to get book token")
         book_token, payment_id = self.get_book_token(config_token)
         print(book_token, payment_id)
-        # book_reservation(book_token, payment_id)
+        self.book_reservation(book_token, payment_id)
         return best_match['date']['start']
 
     def find_reservations(self):
@@ -96,7 +100,7 @@ class ResyWorkflow:
         c.setopt(pycurl.READDATA, StringIO(json.dumps(body)))
         c.setopt(pycurl.POSTFIELDSIZE, len(json.dumps(body)))
         c.setopt(pycurl.WRITEFUNCTION, buffer.write)
-        c.setopt(pycurl.HTTPHEADER, self.headers + self.post_headers)
+        c.setopt(pycurl.HTTPHEADER, self.headers + self.post_headers + ['content-type: application/json'])
 
         c.perform()
         c.close()
@@ -115,14 +119,15 @@ class ResyWorkflow:
             'source_id': 'resy.com-venue-details'
         }
         c.setopt(pycurl.POST, 1)
+        c.setopt(pycurl.HTTPHEADER, self.headers + self.post_headers)
         c.setopt(pycurl.POSTFIELDS, urlencode(body))
         c.setopt(pycurl.WRITEFUNCTION, buffer.write)
-        c.setopt(pycurl.HTTPHEADER, self.headers + self.post_headers)
 
         c.perform()
         c.close()
         response = json.loads(buffer.getvalue())
-        return response['book_token']['value'], response['user']['payment_methods']['id']
+        if c.getinfo(pycurl.RESPONSE_CODE) == 412:
+            raise ExistingReservationError
 
 
 def get_datetime_from_slot(slot):
@@ -146,3 +151,8 @@ def get_best_match_from_position(available_slots, pos, target):
         return after
     else:
         return before
+
+
+# res = Reservation(0, 2, "2024-03-07", "18:45", "0")
+# workflow = ResyWorkflow(res, config.api_key, config.auth_token, "west")
+# workflow.resy_workflow()
