@@ -8,7 +8,7 @@ from io import BytesIO, StringIO
 import json
 import pycurl
 import tenacity
-from tenacity import retry, stop
+from tenacity import retry, stop, wait_chain, wait_fixed
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
@@ -59,10 +59,16 @@ class ResyWorkflow:
         await asyncio.sleep(sleep_time)
         return self.resy_workflow()
 
-    @retry(stop=stop.stop_after_delay(15), retry=tenacity.retry_if_not_exception_type(ExistingReservationError))
+    @retry(stop=stop.stop_after_delay(35),
+           wait=wait_chain(*[wait_fixed(0.5) for i in range(30)] +
+                            [wait_fixed(1.5) for i in range(20)]),
+           retry=tenacity.retry_if_not_exception_type(ExistingReservationError))
     def resy_workflow(self):
         print("starting snipe attempt")
         available_slots = self.find_reservations()
+        if len(available_slots) == 0:
+            print("No availability found")
+            raise Exception
         print(f"found {len(available_slots)} slots, searching for best")
         best_match = find_closest_match(available_slots, self.reservation)
         config_token = best_match['config']['token']
@@ -157,6 +163,6 @@ def get_best_match_from_position(available_slots, pos, target):
         return before
 
 
-# res = Reservation(0, 2, "2024-03-07", "18:45", "10:00")
+# res = Reservation(76033, 2, "2024-03-21", "18:45", "10:00")
 # workflow = ResyWorkflow(res, config.api_key, config.auth_token, "east")
-# workflow.snipe_reservation()
+# workflow.resy_workflow()
