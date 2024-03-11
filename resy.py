@@ -1,3 +1,5 @@
+import logging
+
 import config
 from reservation import Reservation
 
@@ -11,6 +13,10 @@ import tenacity
 from tenacity import retry, stop, wait_chain, wait_fixed
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
+
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 
 class ExistingReservationError(Exception):
@@ -51,7 +57,7 @@ class ResyWorkflow:
     async def snipe_reservation(self):
         now = datetime.now(tz=self.time_zone)
         print(f"currently {now}")
-        schedule_time = datetime.strptime(f'{now.date() + timedelta(days=1)} {self.reservation.snipe_time}:00',
+        schedule_time = datetime.strptime(f'{now.date() + timedelta(days=1)} {self.reservation.snipe_time}:05',
                                           '%Y-%m-%d %H:%M:%S').replace(tzinfo=self.time_zone)
         time_left = schedule_time - now
         sleep_time = time_left.total_seconds()  # seconds from now until the next tables become available
@@ -62,7 +68,8 @@ class ResyWorkflow:
     @retry(stop=stop.stop_after_delay(35),
            wait=wait_chain(*[wait_fixed(0.5) for i in range(30)] +
                             [wait_fixed(1.5) for i in range(20)]),
-           retry=tenacity.retry_if_not_exception_type(ExistingReservationError))
+           retry=tenacity.retry_if_not_exception_type(ExistingReservationError),
+           before_sleep=tenacity.before_sleep_log(logger, logging.INFO))
     def resy_workflow(self):
         print("starting snipe attempt")
         available_slots = self.find_reservations()
@@ -92,7 +99,11 @@ class ResyWorkflow:
 
         c.perform()
         response = json.loads(buffer.getvalue())
-        return response['results']['venues'][0]['slots']
+        try:
+            return response['results']['venues'][0]['slots']
+        except KeyError as e:
+            print(response)
+            raise e
 
     def get_book_token(self, config_token):
         buffer = BytesIO()
