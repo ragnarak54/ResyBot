@@ -71,18 +71,17 @@ class ResyWorkflow:
            retry=tenacity.retry_if_not_exception_type(ExistingReservationError),
            before_sleep=tenacity.before_sleep_log(logger, logging.INFO))
     def resy_workflow(self):
-        print("starting snipe attempt")
+        log("starting snipe attempt")
         available_slots = self.find_reservations()
         if len(available_slots) == 0:
-            print("No availability found")
+            log("No availability found")
             raise Exception
-        print(f"found {len(available_slots)} slots, searching for best")
+        log(f"found {len(available_slots)} slots, searching for best")
         best_match = find_closest_match(available_slots, self.reservation)
         config_token = best_match['config']['token']
-        print("available table found, attempting to get book token")
+        log("available table found, attempting to get book token")
         book_token, payment_id = self.get_book_token(config_token)
-        print(book_token, payment_id)
-        print("got book token! attempting to snipe...")
+        log("got book token! attempting to snipe...")
         self.book_reservation(book_token, payment_id)
         return best_match['date']['start']
 
@@ -98,6 +97,8 @@ class ResyWorkflow:
         c.setopt(pycurl.HTTPHEADER, self.headers)
 
         c.perform()
+        log(f'/find returned {c.getinfo(pycurl.RESPONSE_CODE)}')
+        c.close()
         response = json.loads(buffer.getvalue())
         try:
             return response['results']['venues'][0]['slots']
@@ -123,8 +124,11 @@ class ResyWorkflow:
         c.setopt(pycurl.HTTPHEADER, self.headers + self.post_headers + ['content-type: application/json'])
 
         c.perform()
+        log(f'/details returned {c.getinfo(pycurl.RESPONSE_CODE)}')
         c.close()
         response = json.loads(buffer.getvalue())
+        if not response.get('book_token') or not response.get('user'):
+            print(response)
         return response['book_token']['value'], response['user']['payment_methods'][0]['id']
 
     def book_reservation(self, book_token, payment_id):
@@ -144,6 +148,7 @@ class ResyWorkflow:
         c.setopt(pycurl.WRITEFUNCTION, buffer.write)
 
         c.perform()
+        log(f'/book returned {c.getinfo(pycurl.RESPONSE_CODE)}')
         c.close()
         response = json.loads(buffer.getvalue())
         print(response)
@@ -174,6 +179,11 @@ def get_best_match_from_position(available_slots, pos, target):
         return before
 
 
-# res = Reservation(76033, 2, "2024-03-21", "18:45", "10:00")
+def log(message):
+    now = datetime.now()
+    print(f'{now.strftime("%H:%M:%S")}: {message}')
+
+
+# res = Reservation(52013, 2, "2024-03-21", "18:45", "10:00")
 # workflow = ResyWorkflow(res, config.api_key, config.auth_token, "east")
 # workflow.resy_workflow()
